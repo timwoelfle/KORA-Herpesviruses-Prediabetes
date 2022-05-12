@@ -1,0 +1,147 @@
+---
+title: "HbA1c under the influence of herpesviruses"
+author: "Tim Woelfle"
+date: "17/01/2022"
+output:
+  html_notebook:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+```{r init}
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(ggtext))
+
+round = function(x, digits=0) sprintf(paste0("%.", digits, "f"), x)
+ 
+signif_p = function(x, digits=1) {
+  if (x < 0.001) return("<0.001")
+  x = signif(x, digits)
+  return(paste0("=", as.character(x)))
+}
+signif_p = Vectorize(signif_p, "x")
+pvalAsterisks = function(pval) {
+  return(symnum(pval, cutpoints = c(0, 0.001, 0.01, 0.05, 1), symbols = c("***", "**", "*", "")))
+}
+
+data = readRDS("imputed.rds")
+
+viruses = c("hsv1", "hsv2", "vzv", "ebv", "cmv", "hhv6", "hhv7")
+viruses_f4 = paste0("uh_",viruses,"class")
+names(viruses_f4) = viruses
+
+cov_mod1 = c("male", "utalter")
+cov_mod2 = c(cov_mod1, "utbmi", "ltedyrs", "ever_smoker", "utphys")
+cov_mod3 = c(cov_mod2, "utmvdiab", "utwhom", "ul_trin", "utchohdl", "uthoma_ir")
+cov_mod4 = c(cov_mod3, "f4dm")
+```
+
+# HbA1c analysis
+
+## Univariate
+
+```{r, fig.width=8, fig.height=8}
+unadjusted = lapply(viruses, function(x) lm(ul_hbava ~ ., data[!is.na(data[viruses_f4[x]]), c("ul_hbava", viruses_f4[x])]))
+model1 = lapply(viruses, function(x) lm(ul_hbava ~ ., data[!is.na(data[viruses_f4[x]]), c("ul_hbava", viruses_f4[x], cov_mod1)]))
+model2 = lapply(viruses, function(x) lm(ul_hbava ~ ., data[!is.na(data[viruses_f4[x]]), c("ul_hbava", viruses_f4[x], cov_mod2)]))
+model3 = lapply(viruses, function(x) lm(ul_hbava ~ ., data[!is.na(data[viruses_f4[x]]), c("ul_hbava", viruses_f4[x], cov_mod3)]))
+model4 = lapply(viruses, function(x) lm(ul_hbava ~ ., data[!is.na(data[viruses_f4[x]]), c("ul_hbava", viruses_f4[x], cov_mod4)]))
+
+unadjusted_confint = sapply(unadjusted, confint)
+model1_confint = sapply(model1, confint)
+model2_confint = sapply(model2, confint)
+model3_confint = sapply(model3, confint)
+model4_confint = sapply(model4, confint)
+
+plot_data = data.frame(
+  names = rep(toupper(viruses), 5),
+  beta = c(sapply(unadjusted, coef)[2,], sapply(model1, coef)[2,], sapply(model2, coef)[2,], sapply(model3, coef)[2,], sapply(model4, coef)[2,]),
+  ci_lo = c(unadjusted_confint[2,], model1_confint[2,], model2_confint[2,], model3_confint[2,], model4_confint[2,]),
+  ci_hi = c(unadjusted_confint[4,], model1_confint[nrow(model1_confint)/2+2,], model2_confint[nrow(model2_confint)/2+2,], model3_confint[nrow(model3_confint)/2+2,], model4_confint[nrow(model4_confint)/2+2,]),
+  mod = c(rep("Unadjusted", 7), rep("Adjusted 1", 7), rep("Adjusted 2", 7), rep("Adjusted 3", 7), rep("Adjusted 4", 7)),
+  pval = c(sapply(unadjusted, function(x) coef(summary(x))[,4])[2,], sapply(model1, function(x) coef(summary(x))[,4])[2,], sapply(model2, function(x) coef(summary(x))[,4])[2,], sapply(model3, function(x) coef(summary(x))[,4])[2,], sapply(model4, function(x) coef(summary(x))[,4])[2,]),
+  text = ""
+)
+
+plot_data$text = paste0("β=", round(plot_data[,2],2), " (", round(plot_data[,3],2), ", ", round(plot_data[,4],2), ") <i>p</i>", signif_p(plot_data$pval,1), " ", pvalAsterisks(plot_data$pval))
+
+plot_data$names = factor(plot_data$names, levels=plot_data$names[7:1])
+plot_data$mod = factor(plot_data$mod, levels=c("Unadjusted", "Adjusted 1", "Adjusted 2", "Adjusted 3", "Adjusted 4"))
+
+univariate = ggplot(plot_data, aes(x=names, y=beta, color=mod, group=mod), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_pointrange(aes(ymin=ci_lo, ymax=ci_hi), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_hline(yintercept=0) +
+  xlab(NULL) +
+  geom_vline(xintercept=c(1:6)+0.5, linetype="dotted") +
+  scale_color_manual(values=c("dodgerblue3", "firebrick1", "firebrick2", "firebrick3", "goldenrod3")) +
+  scale_y_continuous(limits=c(-0.15,0.5), breaks=c(-0.1, 0, 0.1, 0.2, 0.3)) +
+  coord_flip() +
+  theme_pubr() +
+  theme(legend.title = element_blank()) +
+  guides(color = guide_legend(override.aes = list(linetype = 0 ) ) ) +
+  geom_richtext(aes(x=names, y=0.3, label=text), color="black", position=position_dodge2(width=0.8, reverse=T), hjust="left", show.legend = FALSE, fill = NA, label.color = NA)
+
+univariate
+
+# pdf("Figure 3.pdf", width=8, height=8)
+# univariate
+# dev.off()
+```
+
+## Multivariate
+
+```{r, fig.width=8, fig.height=8}
+data[is.na(data$uh_vzvclass), "uh_vzvclass"] = data[is.na(data$uh_vzvclass), "u3h_vzvclass"]
+
+unadjusted = lm(ul_hbava ~ ., data[, c("ul_hbava", viruses_f4)])
+model1 = lm(ul_hbava ~ ., data[, c("ul_hbava", viruses_f4, cov_mod1)])
+model2 = lm(ul_hbava ~ ., data[, c("ul_hbava", viruses_f4, cov_mod2)])
+model3 = lm(ul_hbava ~ ., data[, c("ul_hbava", viruses_f4, cov_mod3)])
+model4 = lm(ul_hbava ~ ., data[, c("ul_hbava", viruses_f4, cov_mod4)])
+
+unadjusted_confint = confint(unadjusted)
+model1_confint = confint(model1)
+model2_confint = confint(model2)
+model3_confint = confint(model3)
+model4_confint = confint(model4)
+
+plot_data = data.frame(
+  names = rep(toupper(viruses), 5),
+  beta = c(coef(unadjusted)[2:8], coef(model1)[2:8], coef(model2)[2:8], coef(model3)[2:8], coef(model4)[2:8]),
+  ci_lo = c(unadjusted_confint[2:8,1], model1_confint[2:8,1], model2_confint[2:8,1], model3_confint[2:8,1], model4_confint[2:8,1]),
+  ci_hi = c(unadjusted_confint[2:8,2], model1_confint[2:8,2], model2_confint[2:8,2], model3_confint[2:8,2], model4_confint[2:8,2]),
+  mod = c(rep("Unadjusted", 7), rep("Adjusted 1", 7), rep("Adjusted 2", 7), rep("Adjusted 3", 7), rep("Adjusted 4", 7)),
+  pval = c(coef(summary(unadjusted))[2:8,4], coef(summary(model1))[2:8,4], coef(summary(model2))[2:8,4], coef(summary(model3))[2:8,4], coef(summary(model4))[2:8,4]),
+  text = ""
+)
+
+plot_data$text = paste0("β=", round(plot_data[,2],2), " (", round(plot_data[,3],2), ", ", round(plot_data[,4],2), ") p", signif_p(plot_data$pval,1), " ", pvalAsterisks(plot_data$pval))
+
+plot_data$names = factor(plot_data$names, levels=plot_data$names[7:1])
+plot_data$mod = factor(plot_data$mod, levels=c("Unadjusted", "Adjusted 1", "Adjusted 2", "Adjusted 3", "Adjusted 4"))
+
+ggplot(plot_data, aes(x=names, y=beta, color=mod, group=mod), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_pointrange(aes(ymin=ci_lo, ymax=ci_hi), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_hline(yintercept=0) +
+  xlab(NULL) +
+  geom_vline(xintercept=c(1:6)+0.5, linetype="dotted") +
+  scale_color_manual(values=c("dodgerblue3", "firebrick1", "firebrick2", "firebrick3", "goldenrod3")) +
+  scale_y_continuous(limits=c(-0.15,0.5), breaks=c(-0.1, 0, 0.1, 0.2, 0.3)) +
+  coord_flip() +
+  theme_pubr() +
+  theme(legend.title = element_blank()) +
+  guides(color = guide_legend(override.aes = list(linetype = 0 ) ) ) +
+  geom_text(aes(x=names, y=0.3, label=text), color="black", position=position_dodge2(width=0.8, reverse=T), hjust="left", show.legend = FALSE)
+```
+
+# Session info
+
+For reproducibility
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,561 @@
+---
+title: "Incidence (pre)diabetes under the influence of herpesviruses"
+author: "Tim Woelfle"
+date: "17/01/2022"
+output:
+  html_notebook:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+```{r init}
+suppressPackageStartupMessages(library(sjPlot))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(ggtext))
+
+viruses = c("hsv1", "hsv2", "vzv", "ebv", "cmv", "hhv6", "hhv7")
+
+# data = read.csv("Erg3_K05119n_woelfle_tra_V2007.csv", row.names = "zz_nr")
+# 
+# # Relabel DM factors
+# 
+# labels = c("Normal", "Prediabetes", "Prediabetes", "Prediabetes", "T2D", "T2D", "DM1", "drug", "missing", "missing", "missing")
+# 
+# data$f4dm = factor(data$utdm100y15,  levels = c(0:9,"NA"), labels=labels)
+# data$ff4dm = factor(data$u3tdm100y15,levels = c(0:9,"NA"), labels=labels)
+# 
+# data$f4dm[is.na(data$f4dm)] = "missing"
+# data$ff4dm[is.na(data$ff4dm)] = "missing"
+# 
+# # Remove DM1, drug & data with neither F4/FF4 timepoint
+# 
+# data = data[!data$f4dm %in% c("DM1", "drug"),]
+# data = data[(data$f4dm != "missing" & !is.na(data$uh_hsv1)) | (data$ff4dm != "missing" & !is.na(data$u3h_hsv1)),]
+# 
+# # Remove unused levels
+# data$f4dm = droplevels(data$f4dm)
+# data$ff4dm = droplevels(data$ff4dm)
+# 
+# # Only use participants with F4 data available
+# data = data[data$f4dm != "missing" & !is.na(data$uh_hsv1),]
+# 
+# # Create binary variables for HSV1, HSV2, HHV7
+# # Thresholds provided by Tim Waterboer
+# 
+# thresholds = c(
+#   hsv1 = 100,
+#   hsv2 = 100,
+#   vzvgiorf67 = 100,
+#   vzvgeorf68 = 80,
+#   ebvzebra = 150,
+#   ebvebna1 = 150,
+#   ebvead = 150,
+#   ebvvcap18 = 200,
+#   hcmvpp150nter = 150,
+#   hcmvpp52 = 150,
+#   hcmvpp28 = 150,
+#   hcmvpp65 = 150,
+#   hhv6ie1btr = 50,
+#   hhv6_ie1atr = 50,
+#   hhv6_p101ktr = 50,
+#   hhv6_p100tr = 50,
+#   hhv7u14 = 100
+# )
+# 
+# data$uh_hsv1class = data$uh_hsv1 > thresholds["hsv1"]
+# data$uh_hsv2class = data$uh_hsv2 > thresholds["hsv2"]
+# data$uh_hhv7class = data$uh_hhv7u14 > thresholds["hhv7u14"]
+# data$u3h_hsv1class = data$u3h_hsv1 > thresholds["hsv1"]
+# data$u3h_hsv2class = data$u3h_hsv2 > thresholds["hsv2"]
+# data$u3h_hhv7class = data$u3h_hhv7u14 > thresholds["hhv7u14"]
+# 
+# data$uh_vzvclass = as.logical(data$uh_vzvclass)
+# data$uh_ebvclass = as.logical(data$uh_ebvclass)
+# data$uh_cmvclass = as.logical(data$uh_cmvclass)
+# data$uh_hhv6class = as.logical(data$uh_hhv6class)
+# data$u3h_vzvclass = as.logical(data$u3h_vzvclass)
+# data$u3h_ebvclass = as.logical(data$u3h_ebvclass)
+# data$u3h_cmvclass = as.logical(data$u3h_cmvclass)
+# data$u3h_hhv6class = as.logical(data$u3h_hhv6class)
+# 
+# data = data[data$f4dm != "missing" & data$ff4dm != "missing" & !(is.na(data$uh_vzvclass) & is.na(data$u3h_vzvclass)) & !is.na(data$uh_hsv1class) & !is.na(data$u3h_hsv1class),]
+# 
+# data$male = data$ucsex == 1 # male is encoded as 1, female as 2
+# 
+# # Impute BMI
+# table(is.na(data[,"utbmi"])) # 2 at F4
+# 
+# model = lm(utbmi ~ utalter + male + ltedyrs + utphys, data=data)
+# data[is.na(data[,"utbmi"]), "utbmi"] = predict(model, data[is.na(data[,"utbmi"]),])
+# 
+# # Impute education
+# table(is.na(data[, "ltedyrs"])) # 4 at S4
+# 
+# model = lm(ltedyrs ~ utalter + male + utbmi + utphys, data=data)
+# data[is.na(data[,"ltedyrs"]), "ltedyrs"] = round(predict(model, data[is.na(data[,"ltedyrs"]),]))
+# 
+# # No imputation for physical activity necessary (1 aktiv, 2 inaktiv)
+# table(is.na(data$utphys)) # 0 missing
+# data$utphys = data$utphys==1 # code as binary
+# 
+# # Impute smoking
+# table(data$utcigreg_sf, useNA="always") # 1 = regelmäßige Raucher  2 = unregelmäßige Raucher  3 = Ex-Raucher  4 = Nie-Raucher
+# data$ever_smoker = data$utcigreg_sf < 4
+# table(is.na(data[, "ever_smoker"])) # 1 at F4
+# 
+# model = glm(ever_smoker ~ utalter + male + utbmi + utphys + ltedyrs, data=data, family="binomial")
+# data[is.na(data$ever_smoker), "ever_smoker"] = predict(model, data[is.na(data[,"ever_smoker"]),], type="response")>0.5
+# 
+# # New variables for revision
+# erg = read.csv2("pv_51_19n_erg5.csv", row.names = "zz_nr")
+# data[,colnames(erg)] = erg[rownames(data),]
+# 
+# # Impute hypertension
+# # 1 = normoton (<140/90), 2 = grenzwertig (≥140/90 - <160/95), 3 = hyperton (≥160/95)
+# table(data$utwhom, useNA="always")
+# data$utwhom = data$utwhom-1
+# model = glm(utwhom>0 ~ utalter + male + utbmi + utphys + ltedyrs + ever_smoker, data=data, family="binomial")
+# data[is.na(data$utwhom), "utwhom"] = predict(model, data[is.na(data[,"utwhom"]),], type="response")>0.5
+# data$utwhom = data$utwhom>0 # convert to binary: 0 normoton, 1 hyperton
+# #
+# # Impute lipids (1 missing at F4)
+# data$ul_trin = as.numeric(data$ul_trin)
+# table(is.na(data$ul_trin))
+# model = lm(log(ul_trin) ~ utalter + male + utbmi + utphys + ltedyrs + ever_smoker + utwhom, data=data)
+# data[is.na(data$ul_trin), "ul_trin"] = exp(predict(model, data[is.na(data[,"ul_trin"]),]))
+# 
+# data$utchohdl = as.numeric(data$utchohdl)
+# table(is.na(data$utchohdl))
+# model = lm(log(utchohdl) ~ utalter + male + utbmi + utphys + ltedyrs + ever_smoker + utwhom, data=data)
+# data[is.na(data$utchohdl), "utchohdl"] = exp(predict(model, data[is.na(data[,"utchohdl"]),]))
+# 
+# # Impute fasting glucose (4 missing at F4)
+# data$utglukfast_n = as.numeric(data$utglukfast_n)
+# table(is.na(data$utglukfast_n))
+# model = lm(log(utglukfast_n) ~ utalter + male + utbmi + utphys + ltedyrs + ever_smoker + utwhom, data=data)
+# #summary(model)
+# data[is.na(data$utglukfast_n), "utglukfast_n"] = exp(predict(model, data[is.na(data[,"utglukfast_n"]),]))
+# 
+# # Impute HOMA-IR (86 missing at F4)
+# table(is.na(data$uthoma_ir))
+# model = lm(log(uthoma_ir) ~ utalter + male + utbmi + utphys + ltedyrs + ever_smoker + utwhom + utglukfast_n, data=data)
+# #summary(model)
+# data[is.na(data$uthoma_ir), "uthoma_ir"] = exp(predict(model, data[is.na(data[,"uthoma_ir"]),]))
+# 
+# # Impute family history of diabetes
+# # 1: Ja 2: Nein 3: Weiß nicht
+# # (212 missing at F4 + 270 weiß nicht = 482 missing at F4)
+# table(data$utmvdiab)
+# data$utmvdiab[data$utmvdiab==3] = NA
+# table(is.na(data$utmvdiab))
+# data$utmvdiab = data$utmvdiab==1 # convert to 0 (no), 1 (yes)
+# model = glm(utmvdiab ~ utalter + male + utbmi + utphys + ltedyrs + ever_smoker + utwhom + uthoma_ir + utglukfast_n, data=data, family="binomial")
+# data[is.na(data$utmvdiab), "utmvdiab"] = predict(model, data[is.na(data[,"utmvdiab"]),], type="response")>0.5
+# 
+# saveRDS(data, "imputed.rds")
+data = readRDS("imputed.rds")
+
+viruses_f4 = paste0("uh_",viruses,"class")
+
+cov_mod1 = c("male", "utalter")
+cov_mod2 = c(cov_mod1, "utbmi", "ltedyrs", "ever_smoker", "utphys")
+cov_mod3 = c(cov_mod2, "utmvdiab", "utwhom", "ul_trin", "utchohdl", "uthoma_ir")
+cov_mod4 = c(cov_mod3, "utglukfast_n")
+
+#colMeans(is.na(data[c(viruses_f4, cov_mod4)]))
+
+round = function(x, digits=0) sprintf(paste0("%.", digits, "f"), x)
+ 
+signif_p = function(x, digits=1) {
+  if (x < 0.001) return("<0.001")
+  x = signif(x, digits)
+  return(paste0("=", as.character(x)))
+}
+signif_p = Vectorize(signif_p, "x")
+#https://rpkgs.datanovia.com/ggpubr/reference/stat_compare_means.html
+pvalAsterisks = function(pval) {
+  return(symnum(pval, cutpoints = c(0, 0.001, 0.01, 0.05, 1), symbols = c("***", "**", "*", "")))
+}
+```
+
+# Incidence analysis
+
+## Univariate
+
+```{r, fig.width=8, fig.height=8, message=FALSE}
+f4ff4 = data[
+    data$f4dm == "Normal" &
+    data$ff4dm != "missing" &
+    !(is.na(data$uh_vzvclass) & is.na(data$u3h_vzvclass)) & !is.na(data$uh_hsv1), ]
+
+unadjusted = model1 = lapply(viruses_f4, function(x) glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[x], family="binomial"))
+model1 = lapply(viruses_f4, function(x) glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(x, cov_mod1)], family="binomial"))
+model2 = lapply(viruses_f4, function(x) glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(x, cov_mod2)], family="binomial"))
+model3 = lapply(viruses_f4, function(x) glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(x, cov_mod3)], family="binomial"))
+model4 = lapply(viruses_f4, function(x) glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(x, cov_mod4)], family="binomial"))
+
+unadjusted_confint = sapply(unadjusted, confint)
+model1_confint = sapply(model1, confint)
+model2_confint = sapply(model2, confint)
+model3_confint = sapply(model3, confint)
+model4_confint = sapply(model4, confint)
+
+plot_data = data.frame(
+  names = rep(toupper(viruses), 5),
+  beta = exp(c(sapply(unadjusted, coef)[2,], sapply(model1, coef)[2,], sapply(model2, coef)[2,], sapply(model3, coef)[2,], sapply(model4, coef)[2,])),
+  ci_lo = exp(c(unadjusted_confint[2,], model1_confint[2,], model2_confint[2,], model3_confint[2,], model4_confint[2,])),
+  ci_hi = exp(c(unadjusted_confint[4,], model1_confint[nrow(model1_confint)/2+2,], model2_confint[nrow(model2_confint)/2+2,], model3_confint[nrow(model3_confint)/2+2,], model4_confint[nrow(model4_confint)/2+2,])),
+  mod = c(rep("Unadjusted", 7), rep("Adjusted 1", 7), rep("Adjusted 2", 7), rep("Adjusted 3", 7), rep("Adjusted 4", 7)),
+  pval = c(sapply(unadjusted, function(x) coef(summary(x))[,4])[2,], sapply(model1, function(x) coef(summary(x))[,4])[2,], sapply(model2, function(x) coef(summary(x))[,4])[2,], sapply(model3, function(x) coef(summary(x))[,4])[2,], sapply(model4, function(x) coef(summary(x))[,4])[2,]),
+  text = ""
+)
+
+plot_data$text = paste0("OR=", round(plot_data[,2],2), " (", round(plot_data[,3],2), ", ", round(plot_data[,4],2), ") <i>p</i>", signif_p(plot_data$pval,1), " ", pvalAsterisks(plot_data$pval))
+
+# Adjusted order
+plot_data$names = factor(plot_data$names, levels=plot_data$names[7:1])
+plot_data$mod = factor(plot_data$mod, levels=c("Unadjusted", "Adjusted 1", "Adjusted 2", "Adjusted 3", "Adjusted 4"))
+
+univ_plot = ggplot(plot_data, aes(x=names, y=beta, color=mod, group=mod), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_pointrange(aes(ymin=ci_lo, ymax=ci_hi), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_hline(yintercept=1) +
+  xlab(NULL) +
+  ylab("OR") +
+  geom_vline(xintercept=c(1:6)+0.5, linetype="dotted") +
+  scale_color_manual(values=c("dodgerblue3", "firebrick1", "firebrick2", "firebrick3", "firebrick")) +
+  #scale_y_log10(limits=c(0.2,4), breaks=c(0.25,0.5,1,2,4)) +
+  scale_y_continuous(limits=c(0,3.5), breaks=c(0,0.5,1,1.5,2,2.5)) +
+  coord_flip() +
+  theme_pubr() +
+  theme(legend.title = element_blank()) +
+  guides(color = guide_legend(override.aes = list(linetype = 0 ) )) +
+  geom_richtext(aes(x=names, y=2.5, label=text), color="black", position=position_dodge2(width=0.7, reverse=T), hjust="left", show.legend = FALSE, fill = NA, label.color = NA)
+  
+univ_plot
+
+pdf("Figure 1.pdf", width=8, height=8)
+univ_plot
+dev.off()
+```
+
+```{r}
+library(rmeta)
+
+# Returns raw RR/OR with CI, based on confusion matrix
+RR = function(conf.matrix, verbose=F) {
+  RR = (conf.matrix[4]/(conf.matrix[4]+conf.matrix[2])) / (conf.matrix[3]/(conf.matrix[3]+conf.matrix[1]))
+  RR.SE = sqrt(conf.matrix[2]/(conf.matrix[4]*(conf.matrix[4]+conf.matrix[2])) +   conf.matrix[1]/(conf.matrix[3]*(conf.matrix[3]+conf.matrix[1])))
+  RR.CI = c(exp(log(RR)-1.96*RR.SE),
+            exp(log(RR)+1.96*RR.SE))
+  OR = (conf.matrix[4]/conf.matrix[2]) / (conf.matrix[3]/conf.matrix[1])
+  OR.SE = sqrt(sum(1/conf.matrix))
+  OR.CI = c(exp(log(OR)-1.96*OR.SE),
+            exp(log(OR)+1.96*OR.SE))
+  
+  return(list(RR=RR, RR.CI=RR.CI, OR=OR, OR.CI=OR.CI))
+}
+
+# Returns OR adjusted for confounders (e.g. age, sex, bmi), make sure viral exposure is first variable in exposures dataframe!
+ORadj = function(outcome, exposures) {
+  mod = glm(outcome ~ ., data=exposures, family="binomial")
+  model_summ = summary(mod)
+  ci = confint(mod)
+  ORadj.CI.lower = exp(ci[2,1])
+  ORadj.CI.upper = exp(ci[2,2])
+  return(list(df=data.frame(ORadj=exp(model_summ$coefficients[2,1]), ORadj.CI.lower, ORadj.CI.upper), summ=model_summ, ci=ci))
+}
+
+forestPlotIncidence = function(vir, xticks=NULL) {
+  vir_f4 = paste0("uh_", tolower(vir), "class")
+  vir_ff4 = paste0("u3h_", tolower(vir), "class")
+  
+  f4ff4 = data[
+    data$f4dm == "Normal" &
+    data$ff4dm != "missing" &
+    !is.na(data[vir_f4]), ]
+  table.f4ff4 = table(VIR = f4ff4[,vir_f4], "Prediab/DM2" = f4ff4$ff4dm != "Normal")
+  
+  mod1 = ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, cov_mod1)])
+  mod2 = ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, cov_mod2)])
+  mod3 = ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, cov_mod3)])
+  mod4 = ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, cov_mod4)])
+  
+  print(knitr::kable(data.frame(
+    mod1=c(paste0(round(exp(data.frame(coef(mod1$summ))$Estimate),2), " (", round(exp(mod1$ci[,1]),2), ", ", round(exp(mod1$ci[,2]),2), ")", " p", signif_p(data.frame(coef(mod1$summ))$Pr,1)), rep(NA, 10)),
+    mod2=c(paste0(round(exp(data.frame(coef(mod2$summ))$Estimate),2), " (", round(exp(mod2$ci[,1]),2), ", ", round(exp(mod2$ci[,2]),2), ")", " p", signif_p(data.frame(coef(mod2$summ))$Pr,1)), rep(NA, 6)),
+    mod3=c(paste0(round(exp(data.frame(coef(mod3$summ))$Estimate),2), " (", round(exp(mod3$ci[,1]),2), ", ", round(exp(mod3$ci[,2]),2), ")", " p", signif_p(data.frame(coef(mod3$summ))$Pr,1)), NA),
+    mod4=paste0(round(exp(data.frame(coef(mod4$summ))$Estimate),2), " (", round(exp(mod4$ci[,1]),2), ", ", round(exp(mod4$ci[,2]),2), ")", " p", signif_p(data.frame(coef(mod4$summ))$Pr,1)),
+    row.names=c("Int", vir, cov_mod4)
+  )))
+  
+  ORadj.f4ff4 = rbind(
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "male")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utalter")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utbmi")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "ltedyrs")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "ever_smoker")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utphys")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utmvdiab")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utwhom")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "ul_trin")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utchohdl")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "uthoma_ir")])$df,
+    ORadj(f4ff4$ff4dm != "Normal", f4ff4[, c(vir_f4, "utglukfast_n")])$df,
+    mod4$df
+  )
+  
+  # Forestplot
+  tabletext = cbind(
+    c(
+      paste0("At risk at F4 n=", nrow(f4ff4)), "Normal glucose tolerance at FF4", "Incident (pre)diabetes at FF4", "Male", "Mean age at F4", "Mean BMI at F4", "Mean years of education", "Ever smoker at F4", "Physically active at F4", "Parental diabetes", "Hypertension (>140/90mmHg) at F4", "Mean triglycerides (mmol/l) at F4", "Mean cholesterol/HDL at F4", "Mean HOMA-IR at F4", "Mean fasting glucose (mmol/l) at F4", "All confounders combined"
+    ), c(
+      paste0(sum(!f4ff4[,vir_f4]), " ", vir, "-"),
+      paste0(table.f4ff4[1], " (", round(prop.table(table.f4ff4,margin=1)[1]*100,1), "%)"),
+      paste0(table.f4ff4[3], " (", round(prop.table(table.f4ff4,margin=1)[3]*100,1), "%)"),
+      paste0(round(mean(f4ff4$male[!f4ff4[,vir_f4]])*100,1), "%"),
+      round(mean(f4ff4$utalter[!f4ff4[,vir_f4]]),1),
+      round(mean(f4ff4$utbmi[!f4ff4[,vir_f4]]),1),
+      round(mean(f4ff4$ltedyrs[!f4ff4[,vir_f4]]),1),
+      paste0(round(mean(f4ff4$ever_smoker[!f4ff4[,vir_f4]])*100,1), "%"),
+      paste0(round(mean(f4ff4$utphys[!f4ff4[,vir_f4]])*100,1), "%"),
+      paste0(round(mean(f4ff4$utmvdiab[!f4ff4[,vir_f4]]>0)*100,1), "%"),
+      paste0(round(mean(f4ff4$utwhom[!f4ff4[,vir_f4]])*100,1), "%"),
+      round(mean(f4ff4$ul_trin[!f4ff4[,vir_f4]]),2),
+      round(mean(f4ff4$utchohdl[!f4ff4[,vir_f4]]),2),
+      round(mean(f4ff4$uthoma_ir[!f4ff4[,vir_f4]]),2),
+      round(mean(f4ff4$utglukfast_n[!f4ff4[,vir_f4]]),1),""
+    ), c(
+      paste0(sum(f4ff4[,vir_f4]), " ", vir, "+"),
+      paste0(table.f4ff4[2], " (", round(prop.table(table.f4ff4,margin=1)[2]*100,1), "%)"),
+      paste0(table.f4ff4[4], " (", round(prop.table(table.f4ff4,margin=1)[4]*100,1), "%)"),
+      paste0(round(mean(f4ff4$male[f4ff4[,vir_f4]])*100,1), "%"),
+      round(mean(f4ff4$utalter[f4ff4[,vir_f4]]),1),
+      round(mean(f4ff4$utbmi[f4ff4[,vir_f4]]),1),
+      round(mean(f4ff4$ltedyrs[f4ff4[,vir_f4]]),1),
+      paste0(round(mean(f4ff4$ever_smoker[f4ff4[,vir_f4]])*100,1), "%"),
+      paste0(round(mean(f4ff4$utphys[f4ff4[,vir_f4]])*100,1), "%"),
+      paste0(round(mean(f4ff4$utmvdiab[f4ff4[,vir_f4]]>0)*100,1), "%"),
+      paste0(round(mean(f4ff4$utwhom[f4ff4[,vir_f4]])*100,1), "%"),
+      round(mean(f4ff4$ul_trin[f4ff4[,vir_f4]]),2),
+      round(mean(f4ff4$utchohdl[f4ff4[,vir_f4]]),2),
+      round(mean(f4ff4$uthoma_ir[f4ff4[,vir_f4]]),2),
+      round(mean(f4ff4$utglukfast_n[f4ff4[,vir_f4]]),1),""
+    ), c(
+      "","","OR", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj", "OR.adj"
+    ), c(
+      "", "", round(RR(table.f4ff4)$OR,2), round(ORadj.f4ff4$ORadj,2)
+    )
+  )
+  
+  m<- c(NA,NA, RR(table.f4ff4)$OR, ORadj.f4ff4$ORadj)
+  l<- c(NA,NA, RR(table.f4ff4)$OR.CI[1], ORadj.f4ff4$ORadj.CI.lower)
+  u<- c(NA,NA, RR(table.f4ff4)$OR.CI[2], ORadj.f4ff4$ORadj.CI.upper)
+
+  return(forestplot(tabletext,m,l,u,zero=1,
+     is.summary=c(T, rep(F,14), F), xticks=xticks,
+     col=meta.colors(box="dodgerblue3", line="dodgerblue3", summary="firebrick3")))
+}
+```
+
+### HSV1
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("HSV1")
+```
+
+### HSV2
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("HSV2", xticks=seq(1,2.75,0.25))
+```
+
+### VZV
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("VZV")
+```
+
+### EBV
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("EBV")
+```
+
+### CMV
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("CMV", xticks=seq(0.75,2.25,0.25))
+```
+
+### HHV6
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("HHV6")
+```
+
+### HHV7
+
+```{r, fig.width=8.7,fig.height=3.8,message=FALSE}
+forestPlotIncidence("HHV7")
+```
+
+## Multivariate
+
+VZV serology is missing in 166 cases at F4, thus replace with FF4
+
+```{r}
+table(f4=is.na(f4ff4$uh_vzvclass),ff4=is.na(f4ff4$u3h_vzvclass))
+f4ff4[is.na(f4ff4$uh_vzvclass), "uh_vzvclass"] = f4ff4[is.na(f4ff4$uh_vzvclass), "u3h_vzvclass"]
+```
+
+```{r, fig.width=8, fig.height=8, message=FALSE}
+unadjusted = glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[viruses_f4], family="binomial")
+model1 = glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(viruses_f4, cov_mod1)], family="binomial")
+model2 = glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(viruses_f4, cov_mod2)], family="binomial")
+model3 = glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(viruses_f4, cov_mod3)], family="binomial")
+model4 = glm(f4ff4$ff4dm!="Normal" ~ ., f4ff4[c(viruses_f4, cov_mod4)], family="binomial")
+
+unadjusted_confint = confint(unadjusted)
+model1_confint = confint(model1)
+model2_confint = confint(model2)
+model3_confint = confint(model3)
+model4_confint = confint(model4)
+
+plot_data = data.frame(
+  names = rep(toupper(viruses), 5),
+  beta = exp(c(coef(unadjusted)[2:8], coef(model1)[2:8], coef(model2)[2:8], coef(model3)[2:8], coef(model4)[2:8])),
+  ci_lo = exp(c(unadjusted_confint[2:8,1], model1_confint[2:8,1], model2_confint[2:8,1], model3_confint[2:8,1], model4_confint[2:8,1])),
+  ci_hi = exp(c(unadjusted_confint[2:8,2], model1_confint[2:8,2], model2_confint[2:8,2], model3_confint[2:8,2], model4_confint[2:8,2])),
+  mod = c(rep("Unadjusted", 7), rep("Adjusted 1", 7), rep("Adjusted 2", 7), rep("Adjusted 3", 7), rep("Adjusted 4", 7)),
+  pval = c(coef(summary(unadjusted))[2:8,4], coef(summary(model1))[2:8,4], coef(summary(model2))[2:8,4], coef(summary(model3))[2:8,4], coef(summary(model4))[2:8,4]),
+  text = ""
+)
+
+plot_data$text = paste0("OR=", round(plot_data[,2],2), " (", round(plot_data[,3],2), ", ", round(plot_data[,4],2), ") p", signif_p(plot_data$pval,1), " ", pvalAsterisks(plot_data$pval))
+
+# Adjusted order
+plot_data$names = factor(plot_data$names, levels=plot_data$names[7:1])
+plot_data$mod = factor(plot_data$mod, levels=c("Unadjusted", "Adjusted 1", "Adjusted 2", "Adjusted 3", "Adjusted 4"))
+
+ggplot(plot_data, aes(x=names, y=beta, color=mod, group=mod), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_pointrange(aes(ymin=ci_lo, ymax=ci_hi), position=position_dodge2(width=0.7, reverse=T)) +
+  geom_hline(yintercept=1) +
+  xlab(NULL) +
+  ylab("OR") +
+  geom_vline(xintercept=c(1:6)+0.5, linetype="dotted") +
+  scale_color_manual(values=c("dodgerblue3", "firebrick1", "firebrick2", "firebrick3", "firebrick")) +
+  #scale_y_log10(limits=c(0.2,4), breaks=c(0.25,0.5,1,2,4)) +
+  scale_y_continuous(limits=c(0,3.5), breaks=c(0,0.5,1,1.5,2,2.5)) +
+  coord_flip() +
+  theme_pubr() +
+  theme(legend.title = element_blank()) +
+  guides(color = guide_legend(override.aes = list(linetype = 0 ) )) +
+  geom_text(aes(x=names, y=2.5, label=text), color="black", position=position_dodge2(width=0.7, reverse=T), hjust="left", show.legend = FALSE)
+```
+
+# LASSO Stability analysis
+
+```{r}
+suppressPackageStartupMessages(library(glmnet))
+
+GetBalancedFolds=function(mydata, M){
+  tmp=split(1:length(mydata), f=as.factor(mydata))
+  cacofolds=lapply(tmp, FUN=function(x){sample(rep(1:M,length.out=length(x)), size=length(x))})
+  scv=rep(NA,length(mydata))
+  for (k in 1:2){
+    scv[tmp[[k]]]=cacofolds[[k]]
+  } # balanced folds
+  return(scv)
+}
+
+LassoSub = function(k = 1, Xdata, Ydata, family="gaussian", penalty.factor=NULL, opt="lambda.1se") {
+  if (is.null(penalty.factor)){
+    penalty.factor=rep(1,ncol(Xdata))
+  }
+  if (family=="binomial"){
+    s0=sample(which(Ydata=="0"), size = 0.8 * sum(Ydata=="0"))
+    s1=sample(which(Ydata=="1"), size = 0.8 * sum(Ydata=="1"))
+    s=c(s0,s1)
+  } else {
+    s = sample(nrow(Xdata), size = 0.8 * nrow(Xdata))
+  }
+  Xsub = Xdata[s,]
+  Ysub = Ydata[s]
+  model.sub = cv.glmnet(x = Xsub, y = Ysub, alpha = 1, family=family, penalty.factor=penalty.factor, nfolds=5, 
+                        foldid=GetBalancedFolds(Ysub, M=5))
+  coef.sub = coef(model.sub, s = opt)[-1]
+  return(coef.sub)
+}
+
+StabilityLasso=function(xdata,ydata,niter=1000,family="gaussian", penalty.factor=NULL,opt="lambda.1se"){
+  t0=Sys.time()
+  out=sapply(1:niter, FUN=LassoSub, Xdata=xdata, Ydata=ydata, family=family, penalty.factor=penalty.factor, opt=opt)
+  rownames(out)=colnames(xdata)
+  t1=Sys.time()
+  print(t1-t0)
+  
+  lasso.prop = apply(out, 1, FUN = function(x) {
+    sum(x != 0)/length(x)
+  })
+  
+  names(lasso.prop) = rownames(out)
+  # lasso.prop = sort(lasso.prop, decreasing = TRUE)
+  return(list(lasso.prop=lasso.prop, lasso.mat=out))
+}
+```
+
+## Viruses only
+
+```{r}
+x = as.matrix(f4ff4[viruses_f4])
+y = as.integer(f4ff4$ff4dm != "Normal")
+
+set.seed(1337)
+stab_viruses_only = StabilityLasso(x, y, niter=1000, family="binomial", opt="lambda.1se")
+stab_viruses_only$lasso.prop
+```
+
+## With covariates
+
+```{r}
+x = as.matrix(f4ff4[,c(viruses_f4, cov_mod4)])
+
+set.seed(1337)
+stab_with_adj = StabilityLasso(x, y, niter=1000, family="binomial", opt="lambda.1se")
+stab_with_adj$lasso.prop
+```
+
+## LASSO plot
+
+```{r, fig.width=8, fig.height=5}
+plot_data = data.frame(name=c(toupper(viruses), toupper(viruses), "Male sex", "Age", "BMI", "Years of education", "Ever smoker", "Physically active", "Parental diabetes", "Hypertensive (>140/90)", "Triacylglycerol", "Cholesterol/HDL", "HOMA-IR", "Fasting glucose"), selection_proportion = c(stab_viruses_only$lasso.prop, stab_with_adj$lasso.prop), adj=c(rep("Viruses only",times=7), rep("With covariates",times=19)))[26:1,]
+
+# Preserve order of variables
+plot_data$name = factor(plot_data$name, levels=plot_data$name[1:19])
+
+barplot = ggbarplot(plot_data, "name", "selection_proportion", fill="adj", rotate=T, position = position_dodge2(preserve="single", reverse=T), palette=c("dodgerblue3", "firebrick3")) +
+  xlab(NULL) +
+  ylab("Selection Proportion") +
+  #geom_vline(xintercept=c(1:12)+0.5, linetype="dotted") +
+  geom_vline(xintercept=12.5) +
+  theme(legend.title = element_blank())
+
+barplot
+
+pdf("Figure 2.pdf", width=8, height=5)
+barplot
+dev.off()
+```
+
+# Session info
+
+For reproducibility
+
+```{r}
+sessionInfo()
+```
+
